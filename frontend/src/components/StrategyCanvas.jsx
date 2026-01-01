@@ -1,134 +1,170 @@
 "use client";
-import { useRef, useState, useEffect } from "react";
+import { useRef, useState } from "react";
+import PlayerLayer from "./PlayerLayer";
+import RotationLayer from "./RotationLayer";
+import Toolbar from "./Toolbar";
 
-export default function StrategyCanvas({
-  tool,
-  color,
-  clearSignal,
-  map,
-  saveRequest,
-  loadData
-}) {
+const initialPlayers = [
+  { id: 1, name: "IGL", x: 120, y: 120, color: "#ff4757", locked: false },
+  { id: 2, name: "P2", x: 260, y: 140, color: "#1e90ff", locked: false },
+  { id: 3, name: "P3", x: 180, y: 260, color: "#2ed573", locked: false },
+  { id: 4, name: "P4", x: 320, y: 260, color: "#ffa502", locked: false }
+];
+
+export default function StrategyCanvas() {
+  const [players, setPlayers] = useState(initialPlayers);
+  const [selectedPlayer, setSelectedPlayer] = useState(null);
+  const [rotations, setRotations] = useState([]);
+  const [tool, setTool] = useState("pen");
+  const [penColor, setPenColor] = useState("yellow");
+  const [lines, setLines] = useState([]);
+  const [map, setMap] = useState("/map.png");
+
   const canvasRef = useRef(null);
-  const imgRef = useRef(null);
-  const [isDrawing, setIsDrawing] = useState(false);
-  const [strokes, setStrokes] = useState([]);
-  const currentStroke = useRef([]);
+  const isDrawingRef = useRef(false);
+  const lastPosRef = useRef({ x: 0, y: 0 });
 
-  // Load map
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    const ctx = canvas.getContext("2d");
+  // ---------------- PLAYER CLICK ----------------
+  const handlePlayerClick = (player) => {
+    if (!selectedPlayer) {
+      setSelectedPlayer(player);
+    } else if (selectedPlayer.id !== player.id) {
+      setRotations((prev) => [
+        ...prev,
+        { fromId: selectedPlayer.id, toId: player.id }
+      ]);
+      setSelectedPlayer(null);
+    }
+  };
 
-    const img = new Image();
-    img.src = map;
-    img.onload = () => {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-      imgRef.current = img;
-    };
-  }, [map]);
+  const handleClear = () => {
+  setLines([]);
+  const ctx = canvasRef.current?.getContext("2d");
+  if (ctx) ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+  };
 
-  // Clear drawings
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    const ctx = canvas.getContext("2d");
+  // ---------------- CANVAS DRAWING ----------------
+  const handleMouseDown = (e) => {
+    if (!canvasRef.current) return;
+    isDrawingRef.current = true;
+    const rect = canvasRef.current.getBoundingClientRect();
+    lastPosRef.current = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+  };
 
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    if (imgRef.current) ctx.drawImage(imgRef.current, 0, 0, canvas.width, canvas.height);
-    setStrokes([]);
-  }, [clearSignal]);
+  const handleMouseMove = (e) => {
+    if (!isDrawingRef.current || !canvasRef.current) return;
+    const rect = canvasRef.current.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
 
-  // Save request
-  useEffect(() => {
-    if (!saveRequest) return;
-    const data = {
-      map,
-      strokes
-    };
-    const blob = new Blob([JSON.stringify(data)], { type: "application/json" });
+    const ctx = canvasRef.current.getContext("2d");
+    if (tool === "pen") {
+      ctx.strokeStyle = penColor;
+      ctx.lineWidth = 2;
+      ctx.lineCap = "round";
+      ctx.beginPath();
+      ctx.moveTo(lastPosRef.current.x, lastPosRef.current.y);
+      ctx.lineTo(x, y);
+      ctx.stroke();
+      setLines((prev) => [
+        ...prev,
+        { x1: lastPosRef.current.x, y1: lastPosRef.current.y, x2: x, y2: y, color: penColor }
+      ]);
+    } else if (tool === "eraser") {
+      ctx.clearRect(x - 10, y - 10, 20, 20);
+    }
+
+    lastPosRef.current = { x, y };
+  };
+
+  const handleMouseUp = () => {
+    isDrawingRef.current = false;
+  };
+
+  // ---------------- SAVE & LOAD ----------------
+  const handleSave = () => {
+    const data = { players, rotations, lines };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
     a.download = "strategy.json";
     a.click();
-  }, [saveRequest]);
-
-  // Load strategy
-  useEffect(() => {
-    if (!loadData) return;
-    redraw(loadData.strokes);
-    setStrokes(loadData.strokes);
-  }, [loadData]);
-
-  const redraw = (allStrokes) => {
-    const canvas = canvasRef.current;
-    const ctx = canvas.getContext("2d");
-
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    if (imgRef.current) ctx.drawImage(imgRef.current, 0, 0, canvas.width, canvas.height);
-
-    allStrokes.forEach((stroke) => {
-      ctx.beginPath();
-      ctx.strokeStyle = stroke.color;
-      ctx.lineWidth = stroke.width;
-
-      stroke.points.forEach((p, i) => {
-        if (i === 0) ctx.moveTo(p.x, p.y);
-        else ctx.lineTo(p.x, p.y);
-      });
-      ctx.stroke();
-    });
   };
 
-  const startDrawing = (e) => {
-    const ctx = canvasRef.current.getContext("2d");
-    ctx.beginPath();
-    ctx.moveTo(e.nativeEvent.offsetX, e.nativeEvent.offsetY);
-
-    currentStroke.current = {
-      color: tool === "eraser" ? "#0b0b0b" : color,
-      width: tool === "eraser" ? 20 : 2,
-      points: []
+  const handleLoad = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const data = JSON.parse(event.target.result);
+        if (data.players) setPlayers(data.players);
+        if (data.rotations) setRotations(data.rotations);
+        if (data.lines) setLines(data.lines);
+        setSelectedPlayer(null);
+      } catch (err) {
+        console.error("Failed to load strategy:", err);
+        alert("Invalid file!");
+      }
     };
-
-    setIsDrawing(true);
+    reader.readAsText(file);
   };
 
-  const draw = (e) => {
-    if (!isDrawing) return;
-    const ctx = canvasRef.current.getContext("2d");
-
-    const point = {
-      x: e.nativeEvent.offsetX,
-      y: e.nativeEvent.offsetY
-    };
-
-    currentStroke.current.points.push(point);
-
-    ctx.strokeStyle = currentStroke.current.color;
-    ctx.lineWidth = currentStroke.current.width;
-    ctx.lineTo(point.x, point.y);
-    ctx.stroke();
-  };
-
-  const stopDrawing = () => {
-    setIsDrawing(false);
-    setStrokes((prev) => [...prev, currentStroke.current]);
-  };
-
+  // ---------------- RENDER ----------------
   return (
-    <canvas
-      ref={canvasRef}
-      width={1000}
-      height={600}
-      style={{ border: "2px solid #444" }}
-      onMouseDown={startDrawing}
-      onMouseMove={draw}
-      onMouseUp={stopDrawing}
-      onMouseLeave={stopDrawing}
-    />
+    <div
+  style={{
+    position: "relative",
+    width: 1000,
+    height: 600,
+    border: "2px solid #333",
+    backgroundImage: `url('${map}')`,   // <-- dynamic map
+    backgroundSize: "cover"
+  }}
+>
+      
+      {/* Toolbar */}
+     <Toolbar
+      setTool={setTool}
+      setColor={setPenColor}
+      clearCanvas={handleClear}  // <-- use this
+      save={handleSave}
+      load={handleLoad}
+      setMap={setMap}            // <-- add map functionality
+/>
+
+      {/* Canvas for pen/eraser */}
+      <canvas
+        ref={canvasRef}
+        width={1000}
+        height={600}
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseUp={handleMouseUp}
+        style={{ position: "absolute", top: 0, left: 0, zIndex: 1 }}
+      />
+
+      {/* Rotations */}
+      <RotationLayer rotations={rotations} players={players} />
+
+      {/* Players */}
+      <PlayerLayer
+        players={players}
+        setPlayers={setPlayers}
+        onPlayerClick={handlePlayerClick}
+        selectedPlayer={selectedPlayer}
+      />
+    </div>
   );
 }
+
+
+
+
+
+
+
+
 
 
 
