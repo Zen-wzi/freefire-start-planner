@@ -1,28 +1,44 @@
 "use client";
-import { useRef, useState } from "react";
+import { useRef, useState, useEffect } from "react";
 import PlayerLayer from "./PlayerLayer";
 import RotationLayer from "./RotationLayer";
 import Toolbar from "./Toolbar";
 
-const initialPlayers = [
-  { id: 1, name: "IGL", x: 120, y: 120, color: "#ff4757", locked: false },
-  { id: 2, name: "P2", x: 260, y: 140, color: "#1e90ff", locked: false },
-  { id: 3, name: "P3", x: 180, y: 260, color: "#2ed573", locked: false },
-  { id: 4, name: "P4", x: 320, y: 260, color: "#ffa502", locked: false }
-];
-
 export default function StrategyCanvas() {
-  const [players, setPlayers] = useState(initialPlayers);
+  const containerRef = useRef(null);
+  const canvasRef = useRef(null);
+  const isDrawingRef = useRef(false);
+  const lastPosRef = useRef({ x: 0, y: 0 });
+
+  // ---------------- STATE ----------------
+  const [containerSize, setContainerSize] = useState({ width: 1000, height: 600 });
   const [selectedPlayer, setSelectedPlayer] = useState(null);
+  const [players, setPlayers] = useState([
+    { id: 1, name: "IGL", x: 120, y: 120, color: "#ff4757", locked: false },
+    { id: 2, name: "P2", x: 260, y: 140, color: "#1e90ff", locked: false },
+    { id: 3, name: "P3", x: 180, y: 260, color: "#2ed573", locked: false },
+    { id: 4, name: "P4", x: 320, y: 260, color: "#ffa502", locked: false }
+  ]);
   const [rotations, setRotations] = useState([]);
   const [tool, setTool] = useState("pen");
   const [penColor, setPenColor] = useState("yellow");
   const [lines, setLines] = useState([]);
-  const [map, setMap] = useState("/map.png");
+  const [map, setMap] = useState("/maps/bermuda.jpg");
 
-  const canvasRef = useRef(null);
-  const isDrawingRef = useRef(false);
-  const lastPosRef = useRef({ x: 0, y: 0 });
+  // ---------------- HANDLE RESIZE ----------------
+  useEffect(() => {
+    const updateSize = () => {
+      if (containerRef.current) {
+        setContainerSize({
+          width: containerRef.current.clientWidth,
+          height: containerRef.current.clientHeight
+        });
+      }
+    };
+    updateSize();
+    window.addEventListener("resize", updateSize);
+    return () => window.removeEventListener("resize", updateSize);
+  }, []);
 
   // ---------------- PLAYER CLICK ----------------
   const handlePlayerClick = (player) => {
@@ -37,44 +53,43 @@ export default function StrategyCanvas() {
     }
   };
 
-  const handleClear = () => {
-  setLines([]);
-  const ctx = canvasRef.current?.getContext("2d");
-  if (ctx) ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+  // ---------------- CANVAS DRAWING ----------------
+  const getMousePos = (e) => {
+    const rect = canvasRef.current.getBoundingClientRect();
+    return {
+      x: (e.clientX - rect.left) * (1000 / rect.width),
+      y: (e.clientY - rect.top) * (600 / rect.height)
+    };
   };
 
-  // ---------------- CANVAS DRAWING ----------------
   const handleMouseDown = (e) => {
     if (!canvasRef.current) return;
     isDrawingRef.current = true;
-    const rect = canvasRef.current.getBoundingClientRect();
-    lastPosRef.current = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+    lastPosRef.current = getMousePos(e);
   };
 
   const handleMouseMove = (e) => {
     if (!isDrawingRef.current || !canvasRef.current) return;
-    const rect = canvasRef.current.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
-
+    const pos = getMousePos(e);
     const ctx = canvasRef.current.getContext("2d");
+
     if (tool === "pen") {
       ctx.strokeStyle = penColor;
       ctx.lineWidth = 2;
       ctx.lineCap = "round";
       ctx.beginPath();
       ctx.moveTo(lastPosRef.current.x, lastPosRef.current.y);
-      ctx.lineTo(x, y);
+      ctx.lineTo(pos.x, pos.y);
       ctx.stroke();
       setLines((prev) => [
         ...prev,
-        { x1: lastPosRef.current.x, y1: lastPosRef.current.y, x2: x, y2: y, color: penColor }
+        { x1: lastPosRef.current.x, y1: lastPosRef.current.y, x2: pos.x, y2: pos.y, color: penColor }
       ]);
     } else if (tool === "eraser") {
-      ctx.clearRect(x - 10, y - 10, 20, 20);
+      ctx.clearRect(pos.x - 10, pos.y - 10, 20, 20);
     }
 
-    lastPosRef.current = { x, y };
+    lastPosRef.current = pos;
   };
 
   const handleMouseUp = () => {
@@ -95,45 +110,52 @@ export default function StrategyCanvas() {
     const file = e.target.files[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = (event) => {
-      try {
-        const data = JSON.parse(event.target.result);
-        if (data.players) setPlayers(data.players);
-        if (data.rotations) setRotations(data.rotations);
-        if (data.lines) setLines(data.lines);
-        setSelectedPlayer(null);
-      } catch (err) {
-        console.error("Failed to load strategy:", err);
-        alert("Invalid file!");
-      }
+    reader.onload = () => {
+      const data = JSON.parse(reader.result);
+      if (data.players) setPlayers(data.players);
+      if (data.rotations) setRotations(data.rotations);
+      if (data.lines) setLines(data.lines);
+      setSelectedPlayer(null);
     };
     reader.readAsText(file);
   };
 
+  
+  // ---------------- CLEAR ----------------
+const clearCanvas = () => {
+  setLines([]); // clear lines state
+  if (canvasRef.current) {
+    const ctx = canvasRef.current.getContext("2d");
+    ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height); // clear actual canvas
+  }
+};
+
+
   // ---------------- RENDER ----------------
   return (
     <div
-  style={{
-    position: "relative",
-    width: 1000,
-    height: 600,
-    border: "2px solid #333",
-    backgroundImage: `url('${map}')`,   // <-- dynamic map
-    backgroundSize: "cover"
-  }}
->
-      
-      {/* Toolbar */}
-     <Toolbar
-      setTool={setTool}
-      setColor={setPenColor}
-      clearCanvas={handleClear}  // <-- use this
-      save={handleSave}
-      load={handleLoad}
-      setMap={setMap}            // <-- add map functionality
-/>
+      ref={containerRef}
+      style={{
+        position: "relative",
+        width: "100vw",
+        height: "100vh",
+        backgroundImage: `url('${map}')`,
+        backgroundSize: "contain",
+        backgroundRepeat: "no-repeat",
+        backgroundPosition: "center"
+      }}
+    >
+      {/* ---------------- TOOLBAR ---------------- */}
+      <Toolbar
+        setTool={setTool}
+        setColor={setPenColor}
+        clearCanvas={clearCanvas}
+        save={handleSave}
+        load={handleLoad}
+        setMap={setMap}
+      />
 
-      {/* Canvas for pen/eraser */}
+      {/* ---------------- DRAWING CANVAS ---------------- */}
       <canvas
         ref={canvasRef}
         width={1000}
@@ -141,22 +163,39 @@ export default function StrategyCanvas() {
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
-        style={{ position: "absolute", top: 0, left: 0, zIndex: 1 }}
+        style={{
+          position: "absolute",
+          top: 0,
+          left: 0,
+          width: "100%",
+          height: "100%",
+          zIndex: 1
+        }}
       />
 
-      {/* Rotations */}
+      {/* ---------------- ROTATION ARROWS ---------------- */}
       <RotationLayer rotations={rotations} players={players} />
 
-      {/* Players */}
+      {/* ---------------- PLAYER LAYER ---------------- */}
       <PlayerLayer
         players={players}
         setPlayers={setPlayers}
         onPlayerClick={handlePlayerClick}
         selectedPlayer={selectedPlayer}
+        containerSize={containerSize} // pass size for scaling
       />
     </div>
   );
 }
+
+
+
+
+
+
+
+
+
 
 
 
