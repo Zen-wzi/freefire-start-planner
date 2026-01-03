@@ -1,47 +1,57 @@
-// File: src/components/RotationLayer.jsx
 "use client";
 
-export default function RotationLayer({ rotations, players }) {
+export default function RotationLayer({ rotations = [], players = [], containerSize }) {
+  if (!containerSize || !players) return null;
+  const safePlayers = Array.isArray(players) ? players : [];
+
+  const getPos = (p) => ({
+    x: (p.x / 1000) * containerSize.width,
+    y: (p.y / 600) * containerSize.height
+  });
+
   return (
     <svg
-      width="100vw"
-      height="100vh"
-      style={{ position: "absolute", top: 0, left: 0, pointerEvents: "none" }}
+      width={containerSize.width}
+      height={containerSize.height}
+      style={{ position: "absolute", top: 0, left: 0, pointerEvents: "none", zIndex: 5 }}
     >
       <defs>
-        <marker
-          id="arrow"
-          markerWidth="10"
-          markerHeight="10"
-          refX="6"
-          refY="3"
-          orient="auto"
-        >
+        <marker id="arrowhead" markerWidth="10" markerHeight="10" refX="0" refY="3" orient="auto">
           <path d="M0,0 L0,6 L9,3 z" fill="yellow" />
         </marker>
       </defs>
 
       {rotations.map((r, i) => {
-        const from = players.find((p) => p.id === r.fromId);
-        const to = players.find((p) => p.id === r.toId);
+        const from = safePlayers.find((p) => p.id === r.fromId);
+        const to = safePlayers.find((p) => p.id === r.toId);
         if (!from || !to) return null;
 
+        const start = getPos(from);
+        const end = getPos(to);
+        const midX = (start.x + end.x) / 2;
+        const midY = (start.y + end.y) / 2 - 30;
+
         return (
-          <line
+          <path
             key={i}
-            x1={from.x + 18}
-            y1={from.y + 18}
-            x2={to.x + 18}
-            y2={to.y + 18}
+            d={`M${start.x},${start.y} Q${midX},${midY} ${end.x},${end.y}`}
             stroke="yellow"
             strokeWidth="2"
-            markerEnd="url(#arrow)"
+            fill="none"
+            markerEnd="url(#arrowhead)"
           />
         );
       })}
     </svg>
   );
 }
+
+
+
+
+
+
+
 
 
 
