@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import PresentationControls from "./PresentationControls";
 
 export default function Toolbar({
@@ -15,6 +15,8 @@ export default function Toolbar({
   undo,
   redo,
   currentPhaseMap,
+
+  // Phase UX
   phaseIndex,
   totalPhases,
   phaseName,
@@ -22,6 +24,14 @@ export default function Toolbar({
 }) {
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(phaseName);
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < 768);
+    check();
+    window.addEventListener("resize", check);
+    return () => window.removeEventListener("resize", check);
+  }, []);
 
   return (
     <div
@@ -31,14 +41,15 @@ export default function Toolbar({
         left: 10,
         zIndex: 20,
         display: "flex",
+        flexDirection: isMobile ? "column" : "row",
         gap: 8,
         padding: 10,
         background: "rgba(0,0,0,0.75)",
         borderRadius: 8,
-        flexWrap: "wrap",
-        alignItems: "center"
+        maxWidth: isMobile ? "95vw" : "auto"
       }}
     >
+      {/* Phase Indicator */}
       <div style={{ color: "#fff", fontWeight: 600 }}>
         Phase {phaseIndex + 1} / {totalPhases} —
         {editing ? (
@@ -72,41 +83,60 @@ export default function Toolbar({
         </button>
       </div>
 
-      <button onClick={() => setTool("pen")}>Pen</button>
-      <button onClick={() => setTool("eraser")}>Eraser</button>
-      <input type="color" onChange={(e) => setColor(e.target.value)} />
-      <button onClick={clearCanvas}>Clear</button>
-      <button onClick={undo}>Undo</button>
-      <button onClick={redo}>Redo</button>
+      {/* Tool Row */}
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+        <button onClick={() => setTool("pen")}>Pen</button>
+        <button onClick={() => setTool("eraser")}>Eraser</button>
+        <input type="color" onChange={(e) => setColor(e.target.value)} />
+        <button onClick={clearCanvas}>Clear</button>
+        <button onClick={undo}>Undo</button>
+        <button onClick={redo}>Redo</button>
+      </div>
 
-      <select
-        value={currentPhaseMap}
-        onChange={(e) => onMapChange(e.target.value)}
-      >
-        <option value="/maps/bermuda.jpg">Bermuda</option>
-        <option value="/maps/purgatory.jpg">Purgatory</option>
-      </select>
+      {/* Control Row */}
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+        <select
+          value={currentPhaseMap}
+          onChange={(e) => onMapChange(e.target.value)}
+        >
+          <option value="/maps/bermuda.jpg">Bermuda</option>
+          <option value="/maps/purgatory.jpg">Purgatory</option>
+        </select>
 
-      <button onClick={save}>Save</button>
-      <input
-        type="file"
-        accept=".json"
-        id="load-strategy"
-        onChange={load}
-        style={{ display: "none" }}
-      />
-      <button onClick={() => document.getElementById("load-strategy").click()}>
-        Load
-      </button>
+        <button onClick={save}>Save</button>
 
-      <button onClick={addPhase}>+ Phase</button>
-      <button onClick={prevPhase} disabled={phaseIndex === 0}>◀</button>
-      <button onClick={nextPhase} disabled={phaseIndex === totalPhases - 1}>▶</button>
+        <input
+          type="file"
+          accept=".json"
+          id="load-strategy"
+          onChange={load}
+          style={{ display: "none" }}
+        />
+        <button
+          onClick={() =>
+            document.getElementById("load-strategy").click()
+          }
+        >
+          Load
+        </button>
 
-      <PresentationControls />
+        <button onClick={addPhase}>+ Phase</button>
+        <button onClick={prevPhase} disabled={phaseIndex === 0}>
+          ◀
+        </button>
+        <button
+          onClick={nextPhase}
+          disabled={phaseIndex === totalPhases - 1}
+        >
+          ▶
+        </button>
+
+        <PresentationControls />
+      </div>
     </div>
   );
 }
+
 
 
 

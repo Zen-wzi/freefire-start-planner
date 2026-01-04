@@ -113,6 +113,7 @@ export default function PlayerLayer({
 
     e.stopPropagation();
   };
+  
 
   const toggleLock = (id) => {
     setPlayers((prev) =>

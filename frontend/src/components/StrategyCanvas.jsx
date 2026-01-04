@@ -13,6 +13,8 @@ export default function StrategyCanvas() {
   const isPathActiveRef = useRef(false);
   const lastPosRef = useRef({ x: 0, y: 0 });
   const dprRef = useRef(1);
+  const activePointerIdRef = useRef(null);
+
 
   // ---------------- STATE ----------------
   const [containerSize, setContainerSize] = useState({ width: 1000, height: 600 });
@@ -155,6 +157,33 @@ export default function StrategyCanvas() {
   };
 
   // ---------------- DRAWING ----------------
+  const handlePointerDown = (e) => {
+  if (e.pointerType === "mouse") return;
+  if (activePointerIdRef.current !== null) return;
+
+  activePointerIdRef.current = e.pointerId;
+  e.preventDefault();
+  handleMouseDown(e);
+};
+
+const handlePointerMove = (e) => {
+  if (e.pointerType === "mouse") return;
+  if (e.pointerId !== activePointerIdRef.current) return;
+
+  e.preventDefault();
+  handleMouseMove(e);
+};
+
+const handlePointerUp = (e) => {
+  if (e.pointerType === "mouse") return;
+  if (e.pointerId !== activePointerIdRef.current) return;
+
+  activePointerIdRef.current = null;
+  e.preventDefault();
+  handleMouseUp();
+};
+
+
   const getMousePos = (e) => {
     const rect = canvasRef.current.getBoundingClientRect();
     return {
@@ -378,6 +407,31 @@ setPhases((prevState) => {
           zIndex: 1
         }}
       />
+      <canvas
+  ref={canvasRef}
+  width={1000}
+  height={600}
+  onMouseDown={handleMouseDown}
+  onMouseMove={handleMouseMove}
+  onMouseUp={handleMouseUp}
+  onMouseLeave={handleMouseUp}
+
+  /* ✅ MOBILE SUPPORT */
+  onPointerDown={handlePointerDown}
+  onPointerMove={handlePointerMove}
+  onPointerUp={handlePointerUp}
+  onPointerCancel={handlePointerUp}
+
+  style={{
+    position: "absolute",
+    inset: 0,
+    width: "100%",
+    height: "100%",
+    zIndex: 1,
+    touchAction: "none" // 🔥 CRITICAL FOR MOBILE DRAWING
+  }}
+/>
+
 
       <RotationLayer
         rotations={currentPhase.rotations}
