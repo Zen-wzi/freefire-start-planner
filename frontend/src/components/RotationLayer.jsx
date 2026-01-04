@@ -1,22 +1,67 @@
 "use client";
 
-export default function RotationLayer({ rotations = [], players = [], containerSize }) {
+const MAP_WIDTH = 1000;
+const MAP_HEIGHT = 600;
+const MAP_ASPECT = MAP_WIDTH / MAP_HEIGHT;
+
+export default function RotationLayer({
+  rotations = [],
+  players = [],
+  containerSize
+}) {
   if (!containerSize || !players) return null;
   const safePlayers = Array.isArray(players) ? players : [];
 
+  // ---------- SAME mapRect logic as PlayerLayer ----------
+  const getMapRect = () => {
+    const { width, height } = containerSize;
+    const containerAspect = width / height;
+
+    let drawWidth, drawHeight, offsetX, offsetY;
+
+    if (containerAspect > MAP_ASPECT) {
+      drawHeight = height;
+      drawWidth = height * MAP_ASPECT;
+      offsetX = (width - drawWidth) / 2;
+      offsetY = 0;
+    } else {
+      drawWidth = width;
+      drawHeight = width / MAP_ASPECT;
+      offsetX = 0;
+      offsetY = (height - drawHeight) / 2;
+    }
+
+    return { drawWidth, drawHeight, offsetX, offsetY };
+  };
+
+  const { drawWidth, drawHeight, offsetX, offsetY } = getMapRect();
+
   const getPos = (p) => ({
-    x: (p.x / 1000) * containerSize.width,
-    y: (p.y / 600) * containerSize.height
+    x: offsetX + (p.x / MAP_WIDTH) * drawWidth,
+    y: offsetY + (p.y / MAP_HEIGHT) * drawHeight
   });
 
   return (
     <svg
       width={containerSize.width}
       height={containerSize.height}
-      style={{ position: "absolute", top: 0, left: 0, pointerEvents: "none", zIndex: 5 }}
+      style={{
+        position: "absolute",
+        top: 0,
+        left: 0,
+        pointerEvents: "none",
+        zIndex: 5
+      }}
     >
       <defs>
-        <marker id="arrowhead" markerWidth="10" markerHeight="10" refX="0" refY="3" orient="auto">
+        <marker
+          id="arrowhead"
+          markerWidth="10"
+          markerHeight="10"
+          refX="9"
+          refY="3"
+          orient="auto"
+        >
           <path d="M0,0 L0,6 L9,3 z" fill="yellow" />
         </marker>
       </defs>
@@ -45,6 +90,7 @@ export default function RotationLayer({ rotations = [], players = [], containerS
     </svg>
   );
 }
+
 
 
 
