@@ -1,4 +1,5 @@
 "use client";
+import { useState } from "react";
 import PresentationControls from "./PresentationControls";
 
 export default function Toolbar({
@@ -13,8 +14,15 @@ export default function Toolbar({
   nextPhase,
   undo,
   redo,
-  currentPhaseMap   // ✅ NEW (controlled select)
+  currentPhaseMap,
+  phaseIndex,
+  totalPhases,
+  phaseName,
+  renamePhase
 }) {
+  const [editing, setEditing] = useState(false);
+  const [name, setName] = useState(phaseName);
+
   return (
     <div
       style={{
@@ -27,22 +35,50 @@ export default function Toolbar({
         padding: 10,
         background: "rgba(0,0,0,0.75)",
         borderRadius: 8,
-        flexWrap: "wrap"
+        flexWrap: "wrap",
+        alignItems: "center"
       }}
     >
-      {/* Drawing tools */}
+      <div style={{ color: "#fff", fontWeight: 600 }}>
+        Phase {phaseIndex + 1} / {totalPhases} —
+        {editing ? (
+          <input
+            value={name}
+            autoFocus
+            onChange={(e) => setName(e.target.value)}
+            onBlur={() => {
+              renamePhase(name);
+              setEditing(false);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                renamePhase(name);
+                setEditing(false);
+              }
+            }}
+            style={{ marginLeft: 6 }}
+          />
+        ) : (
+          <span style={{ marginLeft: 6 }}>{phaseName}</span>
+        )}
+        <button
+          onClick={() => {
+            setName(phaseName);
+            setEditing(true);
+          }}
+          style={{ marginLeft: 6 }}
+        >
+          ✏️
+        </button>
+      </div>
+
       <button onClick={() => setTool("pen")}>Pen</button>
       <button onClick={() => setTool("eraser")}>Eraser</button>
-
       <input type="color" onChange={(e) => setColor(e.target.value)} />
-
       <button onClick={clearCanvas}>Clear</button>
-
-      {/* Undo / Redo */}
       <button onClick={undo}>Undo</button>
       <button onClick={redo}>Redo</button>
 
-      {/* Map selector (FIXED & CONTROLLED) */}
       <select
         value={currentPhaseMap}
         onChange={(e) => onMapChange(e.target.value)}
@@ -51,9 +87,7 @@ export default function Toolbar({
         <option value="/maps/purgatory.jpg">Purgatory</option>
       </select>
 
-      {/* Save / Load */}
       <button onClick={save}>Save</button>
-
       <input
         type="file"
         accept=".json"
@@ -65,16 +99,17 @@ export default function Toolbar({
         Load
       </button>
 
-      {/* Phase controls */}
       <button onClick={addPhase}>+ Phase</button>
-      <button onClick={prevPhase}>◀</button>
-      <button onClick={nextPhase}>▶</button>
+      <button onClick={prevPhase} disabled={phaseIndex === 0}>◀</button>
+      <button onClick={nextPhase} disabled={phaseIndex === totalPhases - 1}>▶</button>
 
-      {/* Presentation */}
       <PresentationControls />
     </div>
   );
 }
+
+
+
 
 
 

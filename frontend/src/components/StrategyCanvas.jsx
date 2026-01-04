@@ -10,8 +10,9 @@ export default function StrategyCanvas() {
   const containerRef = useRef(null);
   const canvasRef = useRef(null);
   const isDrawingRef = useRef(false);
+  const isPathActiveRef = useRef(false);
   const lastPosRef = useRef({ x: 0, y: 0 });
-  const currentStrokeRef = useRef([]);
+  const dprRef = useRef(1);
 
   // ---------------- STATE ----------------
   const [containerSize, setContainerSize] = useState({ width: 1000, height: 600 });
@@ -52,32 +53,30 @@ export default function StrategyCanvas() {
     return () => window.removeEventListener("resize", updateSize);
   }, []);
 
-  // ---------------- CANVAS HELPERS ----------------
-  const redrawCanvas = (phase) => {
+  // ---------------- DPI FIX ----------------
+  useEffect(() => {
     if (!canvasRef.current) return;
-    const ctx = canvasRef.current.getContext("2d");
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext("2d");
 
-    ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+    const dpr = window.devicePixelRatio || 1;
+    dprRef.current = dpr;
 
-    phase.lines.forEach((l) => {
-      ctx.strokeStyle = l.color;
-      ctx.lineWidth = 3;
-      ctx.lineCap = "round";
-      ctx.lineJoin = "round";
-      ctx.beginPath();
-      ctx.moveTo(l.x1, l.y1);
-      ctx.lineTo(l.x2, l.y2);
-      ctx.stroke();
-    });
-  };
+    canvas.width = 1000 * dpr;
+    canvas.height = 600 * dpr;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }, [containerSize]);
 
-  const getMousePos = (e) => {
-    const rect = canvasRef.current.getBoundingClientRect();
-    return {
-      x: ((e.clientX - rect.left) / rect.width) * canvasRef.current.width,
-      y: ((e.clientY - rect.top) / rect.height) * canvasRef.current.height
+  // ---------------- HARD STOP DRAWING (FIX) ----------------
+  useEffect(() => {
+    const stopDrawing = () => {
+      isDrawingRef.current = false;
+      isPathActiveRef.current = false;
     };
-  };
+
+    window.addEventListener("mouseup", stopDrawing);
+    return () => window.removeEventListener("mouseup", stopDrawing);
+  }, []);
 
   // ---------------- HISTORY ----------------
   const pushHistory = () => {
@@ -113,7 +112,6 @@ export default function StrategyCanvas() {
       );
 
       Object.assign(p, p.undoStack.pop());
-      requestAnimationFrame(() => redrawCanvas(p));
       return updated;
     });
   };
@@ -134,7 +132,6 @@ export default function StrategyCanvas() {
       );
 
       Object.assign(p, p.redoStack.shift());
-      requestAnimationFrame(() => redrawCanvas(p));
       return updated;
     });
   };
@@ -158,41 +155,78 @@ export default function StrategyCanvas() {
   };
 
   // ---------------- DRAWING ----------------
+  const getMousePos = (e) => {
+    const rect = canvasRef.current.getBoundingClientRect();
+    return {
+      x: ((e.clientX - rect.left) / rect.width) * 1000,
+      y: ((e.clientY - rect.top) / rect.height) * 600
+    };
+  };
+
   const handleMouseDown = (e) => {
     if (!canvasRef.current) return;
     pushHistory();
-    isDrawingRef.current = true;
-    currentStrokeRef.current = [];
-    lastPosRef.current = getMousePos(e);
-  };
 
-  const handleMouseMove = (e) => {
-    if (!isDrawingRef.current || !canvasRef.current) return;
+    isDrawingRef.current = true;
+    isPathActiveRef.current = true;
 
     const pos = getMousePos(e);
-    const ctx = canvasRef.current.getContext("2d");
+    lastPosRef.current = pos;
 
+    const ctx = canvasRef.current.getContext("2d");
+    ctx.globalCompositeOperation = "source-over";
+    ctx.setLineDash([]);
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
     ctx.strokeStyle = penColor;
     ctx.lineWidth = 3;
 
-    if (tool === "pen") {
-      ctx.beginPath();
-      ctx.moveTo(lastPosRef.current.x, lastPosRef.current.y);
+    ctx.beginPath();
+    ctx.moveTo(pos.x, pos.y);
+  };
+
+  const handleMouseMove = (e) => {
+  if (!isDrawingRef.current || !canvasRef.current) return;
+  if (e.buttons !== 1) return; // ✅ HARD STOP (fixes ghost + dotted lines)
+
+
+    const pos = getMousePos(e);
+    const ctx = canvasRef.current.getContext("2d");
+
+    if (tool === "pen" && isPathActiveRef.current && isDrawingRef.current) {
       ctx.lineTo(pos.x, pos.y);
       ctx.stroke();
 
-      currentStrokeRef.current.push({
-        x1: lastPosRef.current.x,
-        y1: lastPosRef.current.y,
-        x2: pos.x,
-        y2: pos.y,
-        color: penColor
+      setPhases((prev) => {
+        const updated = deepCopy(prev);
+        updated[currentPhaseIndex].lines.push({
+          x1: lastPosRef.current.x,
+          y1: lastPosRef.current.y,
+          x2: pos.x,
+          y2: pos.y,
+          color: penColor
+        });
+        return updated;
       });
+
+      const prev = lastPosRef.current;
+lastPosRef.current = pos;
+
+setPhases((prevState) => {
+  const updated = deepCopy(prevState);
+  updated[currentPhaseIndex].lines.push({
+    x1: prev.x,
+    y1: prev.y,
+    x2: pos.x,
+    y2: pos.y,
+    color: penColor
+  });
+  return updated;
+});
+
     }
 
-    if (tool === "eraser") {
+    if (tool === "eraser" && isDrawingRef.current) {
       ctx.save();
       ctx.globalCompositeOperation = "destination-out";
       ctx.beginPath();
@@ -200,26 +234,33 @@ export default function StrategyCanvas() {
       ctx.fill();
       ctx.restore();
     }
-
-    lastPosRef.current = pos;
   };
 
   const handleMouseUp = () => {
-    if (!isDrawingRef.current) return;
     isDrawingRef.current = false;
-
-    if (tool === "pen" && currentStrokeRef.current.length) {
-      setPhases((prev) => {
-        const updated = deepCopy(prev);
-        updated[currentPhaseIndex].lines.push(
-          ...currentStrokeRef.current
-        );
-        return updated;
-      });
-    }
-
-    currentStrokeRef.current = [];
+    isPathActiveRef.current = false;
   };
+
+  // ---------------- REDRAW FROM STATE ----------------
+  useEffect(() => {
+    if (!canvasRef.current) return;
+    const ctx = canvasRef.current.getContext("2d");
+
+    ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+    ctx.globalCompositeOperation = "source-over";
+    ctx.setLineDash([]);
+
+    currentPhase.lines.forEach((l) => {
+      ctx.strokeStyle = l.color;
+      ctx.lineWidth = 3;
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+      ctx.beginPath();
+      ctx.moveTo(l.x1, l.y1);
+      ctx.lineTo(l.x2, l.y2);
+      ctx.stroke();
+    });
+  }, [currentPhase]);
 
   // ---------------- CLEAR ----------------
   const clearCanvas = () => {
@@ -227,7 +268,6 @@ export default function StrategyCanvas() {
     setPhases((prev) => {
       const updated = deepCopy(prev);
       updated[currentPhaseIndex].lines = [];
-      requestAnimationFrame(() => redrawCanvas(updated[currentPhaseIndex]));
       return updated;
     });
   };
@@ -252,7 +292,6 @@ export default function StrategyCanvas() {
       if (Array.isArray(data.phases)) {
         setPhases(data.phases);
         setCurrentPhaseIndex(0);
-        requestAnimationFrame(() => redrawCanvas(data.phases[0]));
       }
     };
     reader.readAsText(file);
@@ -281,6 +320,16 @@ export default function StrategyCanvas() {
         undo={undo}
         redo={redo}
         currentPhaseMap={currentPhase.map}
+        phaseIndex={currentPhaseIndex}
+        totalPhases={phases.length}
+        phaseName={currentPhase.name}
+        renamePhase={(name) => {
+          setPhases((prev) => {
+            const updated = deepCopy(prev);
+            updated[currentPhaseIndex].name = name;
+            return updated;
+          });
+        }}
         onMapChange={(map) => {
           pushHistory();
           setPhases((prev) => {
@@ -305,20 +354,12 @@ export default function StrategyCanvas() {
           ]);
           setCurrentPhaseIndex(phases.length);
         }}
-        prevPhase={() => {
-          setCurrentPhaseIndex((i) => {
-            const next = Math.max(0, i - 1);
-            requestAnimationFrame(() => redrawCanvas(phases[next]));
-            return next;
-          });
-        }}
-        nextPhase={() => {
-          setCurrentPhaseIndex((i) => {
-            const next = Math.min(phases.length - 1, i + 1);
-            requestAnimationFrame(() => redrawCanvas(phases[next]));
-            return next;
-          });
-        }}
+        prevPhase={() => setCurrentPhaseIndex((i) => Math.max(0, i - 1))}
+        nextPhase={() =>
+          setCurrentPhaseIndex((i) =>
+            Math.min(phases.length - 1, i + 1)
+          )
+        }
       />
 
       <canvas
@@ -328,6 +369,7 @@ export default function StrategyCanvas() {
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
+        onMouseLeave={handleMouseUp}
         style={{
           position: "absolute",
           inset: 0,
@@ -363,6 +405,16 @@ export default function StrategyCanvas() {
     </div>
   );
 }
+
+
+
+
+
+
+
+
+
+
 
 
 

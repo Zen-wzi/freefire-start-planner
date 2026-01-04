@@ -7,39 +7,27 @@ export default function PlayerLayer({
   players,
   setPlayers,
   selectedPlayer,
-  onPlayerClick = () => {},   // ✅ SAFETY DEFAULT (FIX)
+  onPlayerClick = () => {},
   containerSize
 }) {
-  const safePlayers = Array.isArray(players) ? players : [];
   const draggingRef = useRef(null);
-  const offsetRef = useRef({ x: 0, y: 0 });
-  const containerRef = useRef(null);
+  const movedRef = useRef(false);
 
   useEffect(() => {
     const handleMouseMove = (e) => {
-      if (!draggingRef.current || !containerRef.current) return;
-
-      const rect = containerRef.current.getBoundingClientRect();
+      if (!draggingRef.current) return;
+      movedRef.current = true;
 
       setPlayers((prev) =>
-        prev.map((p) => {
-          if (p.id === draggingRef.current) {
-            const newX =
-              (e.clientX - rect.left) * (1000 / containerSize.width) -
-              offsetRef.current.x;
-
-            const newY =
-              (e.clientY - rect.top) * (600 / containerSize.height) -
-              offsetRef.current.y;
-
-            return {
-              ...p,
-              x: Math.max(0, Math.min(1000 - SIZE, newX)),
-              y: Math.max(0, Math.min(600 - SIZE, newY))
-            };
-          }
-          return p;
-        })
+        prev.map((p) =>
+          p.id === draggingRef.current
+            ? {
+                ...p,
+                x: Math.max(0, Math.min(1000 - SIZE, p.x + e.movementX)),
+                y: Math.max(0, Math.min(600 - SIZE, p.y + e.movementY))
+              }
+            : p
+        )
       );
     };
 
@@ -49,67 +37,24 @@ export default function PlayerLayer({
 
     window.addEventListener("mousemove", handleMouseMove);
     window.addEventListener("mouseup", handleMouseUp);
-
     return () => {
       window.removeEventListener("mousemove", handleMouseMove);
       window.removeEventListener("mouseup", handleMouseUp);
     };
-  }, [setPlayers, containerSize]);
-
-  const handleMouseDown = (e, player) => {
-    if (player.locked || !containerRef.current) return;
-
-    draggingRef.current = player.id;
-
-    const rect = containerRef.current.getBoundingClientRect();
-    offsetRef.current = {
-      x:
-        (e.clientX - rect.left) * (1000 / containerSize.width) -
-        player.x,
-      y:
-        (e.clientY - rect.top) * (600 / containerSize.height) -
-        player.y
-    };
-
-    e.stopPropagation();
-  };
-
-  const renamePlayer = (id) => {
-    const name = prompt("Enter player name / role:");
-    if (!name) return;
-
-    setPlayers((prev) =>
-      prev.map((p) => (p.id === id ? { ...p, name } : p))
-    );
-  };
-
-  const toggleLock = (id) => {
-    setPlayers((prev) =>
-      prev.map((p) =>
-        p.id === id ? { ...p, locked: !p.locked } : p
-      )
-    );
-  };
+  }, [setPlayers]);
 
   return (
-    <div
-      ref={containerRef}
-      style={{
-        position: "absolute",
-        inset: 0,
-        pointerEvents: "none"
-      }}
-    >
-      {safePlayers.map((p) => (
+    <>
+      {players.map((p) => (
         <div
           key={p.id}
-          onClick={() => onPlayerClick(p)}
-          onDoubleClick={() => renamePlayer(p.id)}
-          onContextMenu={(e) => {
-            e.preventDefault();
-            toggleLock(p.id);
+          onMouseDown={(e) => {
+            if (p.locked || e.button !== 0) return;
+            draggingRef.current = p.id;
+            movedRef.current = false;
+            e.stopPropagation();
           }}
-          onMouseDown={(e) => handleMouseDown(e, p)}
+          onClick={() => !movedRef.current && onPlayerClick(p)}
           style={{
             position: "absolute",
             left: (p.x / 1000) * containerSize.width,
@@ -117,7 +62,7 @@ export default function PlayerLayer({
             width: SIZE,
             height: SIZE,
             borderRadius: "50%",
-            backgroundColor: p.color,
+            background: p.color,
             color: "#fff",
             display: "flex",
             alignItems: "center",
@@ -129,17 +74,43 @@ export default function PlayerLayer({
               selectedPlayer?.id === p.id
                 ? "3px solid yellow"
                 : "2px solid #111",
-            pointerEvents: "auto",
             userSelect: "none",
             zIndex: 10
           }}
         >
           {p.name}
+          <span
+            onClick={(e) => {
+              e.stopPropagation();
+              setPlayers((prev) =>
+                prev.map((pl) =>
+                  pl.id === p.id ? { ...pl, locked: !pl.locked } : pl
+                )
+              );
+            }}
+            style={{
+              position: "absolute",
+              bottom: -6,
+              right: -6,
+              background: "#000",
+              color: "#fff",
+              fontSize: 10,
+              padding: 2,
+              borderRadius: "50%",
+              cursor: "pointer"
+            }}
+          >
+            🔒
+          </span>
         </div>
       ))}
-    </div>
+    </>
   );
 }
+
+
+
+
 
 
 
